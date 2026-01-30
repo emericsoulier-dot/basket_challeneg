@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Basket Stats 3000 - V10 Live Stats</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; touch-action: manipulation; }
+        .digital-font { font-family: 'Orbitron', sans-serif; }
+        .btn-touch:active { transform: scale(0.95); opacity: 0.9; }
+        .no-select { user-select: none; -webkit-user-select: none; }
+        .modal-enter { animation: slideUp 0.3s ease-out forwards; }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .color-btn.selected { ring-width: 4px; ring-color: white; transform: scale(1.1); }
+    </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'sport-dark': '#0f172a', 'sport-panel': '#1e293b',
+                        'neon-green': '#39ff14', 'neon-red': '#ff073a',
+                        'neon-blue': '#00f9ff', 'neon-yellow': '#fbbf24'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-sport-dark text-white h-screen flex flex-col overflow-hidden no-select">
+
+    <div id="modal-challenge" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
+        <div class="bg-gray-800 w-full sm:w-96 rounded-t-2xl sm:rounded-2xl p-6 border-t-4 border-neon-yellow shadow-2xl modal-enter">
+            <h3 class="text-2xl font-bold text-neon-yellow uppercase text-center mb-1">🖥️ Challenge Vidéo</h3>
+            <p id="challenge-team-name" class="text-center text-gray-400 text-sm mb-4">Équipe...</p>
+            <div id="step-reason" class="space-y-3">
+                <p class="text-center font-bold mb-2">Quel motif ?</p>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="selectReason('Marché')" class="bg-gray-700 py-3 rounded hover:bg-gray-600 font-bold text-sm">👟 Marché</button>
+                    <button onclick="selectReason('Contact')" class="bg-gray-700 py-3 rounded hover:bg-gray-600 font-bold text-sm">💥 Contact</button>
+                    <button onclick="selectReason('Reprise')" class="bg-gray-700 py-3 rounded hover:bg-gray-600 font-bold text-sm">✋ Reprise</button>
+                </div>
+                <button onclick="closeModal()" class="w-full mt-4 py-2 text-gray-500 text-sm">Annuler</button>
+            </div>
+            <div id="step-verdict" class="hidden space-y-4">
+                <p class="text-center text-lg">Motif : <span id="selected-reason" class="text-neon-yellow font-bold">...</span></p>
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="resolveChallenge(false)" class="bg-red-600/20 border-2 border-red-500 py-4 rounded-xl text-red-500 font-bold">-10 Pts</button>
+                    <button onclick="resolveChallenge(true)" class="bg-green-600/20 border-2 border-green-500 py-4 rounded-xl text-green-500 font-bold">Validé</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-setup" class="flex-1 flex flex-col p-6 overflow-y-auto">
+        <header class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-green tracking-tighter uppercase">Tournoi 3 Équipes</h1>
+            <p class="text-gray-400 text-xs mt-1">Configuration</p>
+        </header>
+
+        <div class="bg-sport-panel rounded-2xl p-4 shadow-lg border border-gray-700 space-y-6 flex-1">
+            
+            <div>
+                <label class="block text-xs uppercase text-gray-400 mb-2 text-center">Équipe 1</label>
+                <div class="flex justify-center gap-2" id="selector-team-0"></div>
+            </div>
+            <div>
+                <label class="block text-xs uppercase text-gray-400 mb-2 text-center">Équipe 2</label>
+                <div class="flex justify-center gap-2" id="selector-team-1"></div>
+            </div>
+            <div>
+                <label class="block text-xs uppercase text-gray-400 mb-2 text-center">Équipe 3</label>
+                <div class="flex justify-center gap-2" id="selector-team-2"></div>
+            </div>
+
+            <hr class="border-gray-700">
+
+            <div class="pt-2 text-center">
+                <label class="block text-xs uppercase text-gray-400 mb-2">Durée des Matchs</label>
+                <div class="grid grid-cols-2 gap-4 mb-2">
+                    <button onclick="setMode('time')" id="btn-mode-time" class="p-2 text-xs rounded border-2 border-neon-blue bg-neon-blue/20">⏱️ Temps</button>
+                    <button onclick="setMode('poss')" id="btn-mode-poss" class="p-2 text-xs rounded border-2 border-gray-600 bg-gray-800">🏀 Poss.</button>
+                </div>
+                <div id="input-time-container">
+                    <input type="number" id="matchDuration" value="5" class="w-16 bg-gray-800 p-2 rounded text-center font-bold"> min
+                </div>
+                <div id="input-poss-container" class="hidden">
+                    <input type="number" id="maxPossessions" value="10" class="w-16 bg-gray-800 p-2 rounded text-center font-bold"> poss
+                </div>
+            </div>
+        </div>
+        <button onclick="initTournament()" class="mt-4 w-full py-4 bg-gradient-to-r from-neon-blue to-purple-600 rounded-xl font-bold text-white uppercase">
+            Créer le Tournoi
+        </button>
+    </div>
+
+    <div id="screen-intermatch" class="hidden h-full flex flex-col p-6 items-center justify-center bg-gray-900 fade-in">
+        <h2 class="text-3xl font-bold text-white mb-2" id="inter-match-title">Match 1</h2>
+        <div class="flex items-center gap-4 text-xl mb-8">
+            <span id="inter-teamA" class="font-bold">...</span>
+            <span class="text-gray-500">VS</span>
+            <span id="inter-teamB" class="font-bold">...</span>
+        </div>
+
+        <div class="bg-sport-panel p-6 rounded-xl w-full max-w-sm border border-gray-700 mb-8">
+            <label class="block text-xs uppercase text-gray-400 mb-3 text-center">Qui arbitre ce match ?</label>
+            <input type="text" id="currentRefName" placeholder="Noms des arbitres" class="w-full bg-gray-800 p-3 rounded text-center text-white border border-gray-600 focus:border-neon-blue outline-none">
+        </div>
+
+        <button onclick="startMatch()" class="w-full max-w-sm py-4 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-white uppercase text-xl shadow-[0_0_20px_rgba(34,197,94,0.4)]">
+            Coup d'Envoi 🏀
+        </button>
+    </div>
+
+    <div id="screen-match" class="hidden h-full flex flex-col">
+        <div class="bg-gray-900 border-b border-gray-700 p-2 flex justify-between items-center shadow-lg z-10">
+            <div class="w-1/3 text-center">
+                <span id="labelA" class="font-bold text-xs block truncate">Eq A</span>
+                <span id="scoreDisplayA" class="digital-font text-3xl text-neon-red">000</span>
+            </div>
+            
+            <div class="w-1/3 flex flex-col items-center justify-center">
+                 <div class="flex items-center gap-2 mb-1">
+                     <span id="timerDisplay" class="digital-font text-xl text-neon-green tracking-widest bg-black px-2 py-1 rounded border border-gray-700">00:00</span>
+                     <button id="btn-pause" onclick="togglePause()" class="w-8 h-8 rounded bg-gray-700 border border-gray-500 flex items-center justify-center hover:bg-gray-600">
+                        ⏸️
+                     </button>
+                 </div>
+                 
+                 <div class="flex gap-2">
+                     <button onclick="undoLastAction()" class="bg-yellow-600/30 text-yellow-500 px-2 py-1 rounded-full text-[10px] font-bold border border-yellow-500/50 flex items-center justify-center gap-1">
+                        ↩️ Undo
+                     </button>
+                     <button onclick="showLiveStats()" class="bg-blue-600/30 text-neon-blue px-2 py-1 rounded-full text-[10px] font-bold border border-blue-500/50 flex items-center justify-center gap-1">
+                        📊 Stats
+                     </button>
+                 </div>
+            </div>
+
+            <div class="w-1/3 text-center">
+                <span id="labelB" class="font-bold text-xs block truncate">Eq B</span>
+                <span id="scoreDisplayB" class="digital-font text-3xl text-neon-red">000</span>
+            </div>
+        </div>
+
+        <div class="flex-1 grid grid-cols-2">
+            <div id="panelA" class="border-r border-gray-700 flex flex-col p-1 gap-1 relative">
+                <div id="possCountA" class="absolute top-1 left-1 bg-black/60 px-1 rounded text-[10px] text-white z-10">P:0</div>
+                <button onclick="addStat('A', 'poss')" class="btn-touch flex-1 bg-gray-700 rounded-lg flex flex-col items-center justify-center border-l-4 border-white"><span class="text-2xl">🏀</span><span class="text-xs font-bold">POSS</span></button>
+                <div class="h-1/5 flex gap-1">
+                     <button onclick="addStat('A', 'zone')" class="btn-touch flex-1 bg-blue-900/40 border border-blue-500 rounded flex flex-col items-center justify-center"><span class="text-lg font-bold text-blue-300">+1</span><span class="text-[8px] text-blue-200">ZONE</span></button>
+                     <button onclick="addStat('A', 'touch')" class="btn-touch flex-1 bg-orange-900/40 border border-orange-500 rounded flex flex-col items-center justify-center"><span class="text-lg font-bold text-orange-300">+10</span><span class="text-[8px] text-orange-200">TOUCH</span></button>
+                </div>
+                <button onclick="addStat('A', 'goal')" class="btn-touch h-1/5 bg-green-900/40 border border-green-500 rounded flex items-center justify-center gap-2"><span class="text-2xl font-bold text-green-400">+100</span><span class="text-xs font-bold text-green-200">PANIER</span></button>
+                <div class="h-1/6 flex gap-1">
+                    <button onclick="triggerChallenge('A')" id="btn-chal-A" class="btn-touch w-2/3 bg-yellow-600/20 border border-yellow-500 rounded flex flex-col items-center justify-center"><span class="text-sm">📹</span><span class="text-[8px] text-yellow-200" id="chal-count-A">3</span></button>
+                    <button onclick="applyContestation('A')" class="btn-touch w-1/3 bg-red-900/40 border border-red-600 rounded flex flex-col items-center justify-center"><span class="text-sm">🤬</span><span class="text-[8px] text-red-300">-100</span></button>
+                </div>
+            </div>
+            <div id="panelB" class="flex flex-col p-1 gap-1 relative">
+                <div id="possCountB" class="absolute top-1 right-1 bg-black/60 px-1 rounded text-[10px] text-white z-10">P:0</div>
+                <button onclick="addStat('B', 'poss')" class="btn-touch flex-1 bg-gray-700 rounded-lg flex flex-col items-center justify-center border-r-4 border-white"><span class="text-2xl">🏀</span><span class="text-xs font-bold">POSS</span></button>
+                <div class="h-1/5 flex gap-1">
+                     <button onclick="addStat('B', 'zone')" class="btn-touch flex-1 bg-blue-900/40 border border-blue-500 rounded flex flex-col items-center justify-center"><span class="text-lg font-bold text-blue-300">+1</span><span class="text-[8px] text-blue-200">ZONE</span></button>
+                     <button onclick="addStat('B', 'touch')" class="btn-touch flex-1 bg-orange-900/40 border border-orange-500 rounded flex flex-col items-center justify-center"><span class="text-lg font-bold text-orange-300">+10</span><span class="text-[8px] text-orange-200">TOUCH</span></button>
+                </div>
+                <button onclick="addStat('B', 'goal')" class="btn-touch h-1/5 bg-green-900/40 border border-green-500 rounded flex items-center justify-center gap-2"><span class="text-xs font-bold text-green-200">PANIER</span><span class="text-2xl font-bold text-green-400">+100</span></button>
+                <div class="h-1/6 flex gap-1">
+                    <button onclick="applyContestation('B')" class="btn-touch w-1/3 bg-red-900/40 border border-red-600 rounded flex flex-col items-center justify-center"><span class="text-sm">🤬</span><span class="text-[8px] text-red-300">-100</span></button>
+                    <button onclick="triggerChallenge('B')" id="btn-chal-B" class="btn-touch w-2/3 bg-yellow-600/20 border border-yellow-500 rounded flex flex-col items-center justify-center"><span class="text-sm">📹</span><span class="text-[8px] text-yellow-200" id="chal-count-B">3</span></button>
+                </div>
+            </div>
+        </div>
+        <button onclick="endMatchSequence()" class="bg-red-600 py-3 font-bold text-white uppercase text-sm">Fin du Match</button>
+    </div>
+
+    <div id="screen-referee" class="hidden h-full flex flex-col p-6 bg-gray-900 fade-in overflow-y-auto">
+        <h2 class="text-xl font-bold text-center text-white mb-2 uppercase">👨‍⚖️ Note l'Arbitrage</h2>
+        <p id="ref-name-display" class="text-center text-neon-blue font-bold mb-4">...</p>
+        <div class="space-y-3 flex-1">
+            <button onclick="saveReferee(1)" class="w-full bg-gray-800 border-l-8 border-red-500 p-4 rounded text-left">
+                <span class="font-bold text-red-400">Niveau 1 : Timide</span><br><span class="text-xs text-gray-400">Ne siffle pas ou peu.</span>
+            </button>
+            <button onclick="saveReferee(2)" class="w-full bg-gray-800 border-l-8 border-orange-500 p-4 rounded text-left">
+                <span class="font-bold text-orange-400">Niveau 2 : Présent</span><br><span class="text-xs text-gray-400">Siffle peu, des erreurs.</span>
+            </button>
+            <button onclick="saveReferee(3)" class="w-full bg-gray-800 border-l-8 border-yellow-400 p-4 rounded text-left">
+                <span class="font-bold text-yellow-400">Niveau 3 : Correct</span><br><span class="text-xs text-gray-400">Siffle l'évident.</span>
+            </button>
+            <button onclick="saveReferee(4)" class="w-full bg-gray-800 border-l-8 border-green-500 p-4 rounded text-left">
+                <span class="font-bold text-green-400">Niveau 4 : Efficace</span><br><span class="text-xs text-gray-400">Siffle tout et explique.</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="screen-match-bilan" class="hidden h-full flex flex-col p-4 bg-gray-900">
+        <h2 class="text-xl font-bold text-center mb-4 border-b border-gray-700 pb-2" id="bilan-title">Résultat Match</h2>
+        <div class="flex justify-between bg-black p-3 rounded mb-4">
+            <div class="text-center w-1/3"><div id="bmNameA" class="font-bold text-sm"></div><div id="bmScoreA" class="text-2xl text-neon-blue digital-font"></div></div>
+            <div class="text-center w-1/3 pt-2 text-xs text-gray-500">VS</div>
+            <div class="text-center w-1/3"><div id="bmNameB" class="font-bold text-sm"></div><div id="bmScoreB" class="text-2xl text-neon-blue digital-font"></div></div>
+        </div>
+        <div class="space-y-4 flex-1 overflow-y-auto">
+            <div class="bg-gray-800 p-3 rounded border-l-4" id="bmCardA">
+                 <div class="flex justify-between"><span class="font-bold" id="bmTeamA"></span><span id="bmVerdictA" class="text-xs px-2 rounded bg-gray-700"></span></div>
+                 <div class="text-xs mt-2 text-gray-300 leading-relaxed" id="bmStatsA"></div>
+                 <p class="text-xs italic text-green-400 mt-2" id="bmAdviceA"></p>
+            </div>
+            <div class="bg-gray-800 p-3 rounded border-l-4" id="bmCardB">
+                 <div class="flex justify-between"><span class="font-bold" id="bmTeamB"></span><span id="bmVerdictB" class="text-xs px-2 rounded bg-gray-700"></span></div>
+                 <div class="text-xs mt-2 text-gray-300 leading-relaxed" id="bmStatsB"></div>
+                 <p class="text-xs italic text-green-400 mt-2" id="bmAdviceB"></p>
+            </div>
+        </div>
+        <button id="btn-bilan-action" class="mt-4 w-full py-3 font-bold rounded">...</button>
+    </div>
+
+    <div id="screen-super-bilan" class="hidden h-full flex flex-col p-4 bg-gray-900">
+        <h2 class="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-red-500 uppercase mb-4">🏆 Classement Final</h2>
+        
+        <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-sm text-left text-gray-400 mb-6">
+                <thead class="text-xs uppercase bg-gray-700 text-gray-200">
+                    <tr>
+                        <th class="px-2 py-2">Rg</th>
+                        <th class="px-2 py-2">Équipe</th>
+                        <th class="px-2 py-2 text-center">Pts</th>
+                        <th class="px-2 py-2 text-center">Score</th>
+                    </tr>
+                </thead>
+                <tbody id="ranking-body">
+                    </tbody>
+            </table>
+
+            <div id="tournament-stats-summary" class="space-y-4">
+                </div>
+        </div>
+
+        <div class="mt-4 flex gap-2">
+            <button onclick="generateTournamentPDF()" class="flex-1 bg-gray-700 py-3 rounded font-bold text-white">📄 PDF Bilan</button>
+            <button onclick="location.reload()" class="flex-1 bg-red-600 py-3 rounded font-bold text-white">🔄 Nouveau</button>
+        </div>
+    </div>
+
+    <script>
+        const COLORS = [
+            { id: 'bleu', hex: '#3b82f6', label: 'Bleus', tailwind: 'text-blue-500' },
+            { id: 'jaune', hex: '#facc15', label: 'Jaunes', tailwind: 'text-yellow-400' },
+            { id: 'rouge', hex: '#ef4444', label: 'Rouges', tailwind: 'text-red-500' },
+            { id: 'noir', hex: '#e5e7eb', label: 'Noirs', tailwind: 'text-gray-200' },
+            { id: 'vert', hex: '#22c55e', label: 'Verts', tailwind: 'text-green-500' }
+        ];
+
+        let tournament = {
+            teams: [
+                { id: 0, colorIdx: 0, stats: { wins:0, score:0, poss:0, shots:0, goals:0 } },
+                { id: 1, colorIdx: 2, stats: { wins:0, score:0, poss:0, shots:0, goals:0 } },
+                { id: 2, colorIdx: 1, stats: { wins:0, score:0, poss:0, shots:0, goals:0 } }
+            ],
+            schedule: [[0, 1], [1, 2], [2, 0]],
+            currentMatchIdx: 0,
+            history: [],
+            config: { mode: 'time', duration: 5, maxPoss: 10 }
+        };
+
+        let matchState = {
+            teams: { A: {}, B: {} },
+            teamIndices: { A: -1, B: -1 },
+            timer: null, secondsLeft: 0, isPlaying: false,
+            referee: { name: "", level: 0, text: "" },
+            historyStack: []
+        };
+
+        function initSelectors() {
+            [0, 1, 2].forEach(teamIdx => {
+                const container = document.getElementById(`selector-team-${teamIdx}`);
+                COLORS.forEach((col, colIdx) => {
+                    const btn = document.createElement('button');
+                    btn.className = `w-8 h-8 rounded-full border-2 border-gray-600 ${colIdx === tournament.teams[teamIdx].colorIdx ? 'ring-4 ring-white scale-110' : ''}`;
+                    btn.style.backgroundColor = col.hex;
+                    btn.onclick = () => selectTeamColor(teamIdx, colIdx);
+                    container.appendChild(btn);
+                });
+            });
+        }
+
+        function selectTeamColor(teamIdx, colIdx) {
+            tournament.teams[teamIdx].colorIdx = colIdx;
+            const container = document.getElementById(`selector-team-${teamIdx}`);
+            Array.from(container.children).forEach((btn, idx) => {
+                btn.className = `w-8 h-8 rounded-full border-2 border-gray-600 ${idx === colIdx ? 'ring-4 ring-white scale-110' : ''}`;
+            });
+        }
+
+        function setMode(mode) {
+            tournament.config.mode = mode;
+            document.getElementById('input-time-container').classList.toggle('hidden', mode !== 'time');
+            document.getElementById('input-poss-container').classList.toggle('hidden', mode !== 'poss');
+            document.getElementById('btn-mode-time').className = mode === 'time' ? "p-2 text-xs rounded border-2 border-neon-blue bg-neon-blue/20" : "p-2 text-xs rounded border-2 border-gray-600 bg-gray-800";
+            document.getElementById('btn-mode-poss').className = mode === 'poss' ? "p-2 text-xs rounded border-2 border-neon-blue bg-neon-blue/20" : "p-2 text-xs rounded border-2 border-gray-600 bg-gray-800";
+        }
+
+        function initTournament() {
+            tournament.config.duration = parseInt(document.getElementById('matchDuration').value);
+            tournament.config.maxPoss = parseInt(document.getElementById('maxPossessions').value);
+            document.getElementById('screen-setup').classList.add('hidden');
+            setupInterMatch();
+        }
+
+        function setupInterMatch() {
+            const idx = tournament.currentMatchIdx;
+            if (idx >= 3) { showSuperBilan(); return; }
+            const teamAIdx = tournament.schedule[idx][0];
+            const teamBIdx = tournament.schedule[idx][1];
+            const teamA = COLORS[tournament.teams[teamAIdx].colorIdx];
+            const teamB = COLORS[tournament.teams[teamBIdx].colorIdx];
+
+            document.getElementById('inter-match-title').innerText = `Match ${idx + 1} / 3`;
+            const elA = document.getElementById('inter-teamA');
+            const elB = document.getElementById('inter-teamB');
+            elA.innerText = teamA.label; elA.style.color = teamA.hex;
+            elB.innerText = teamB.label; elB.style.color = teamB.hex;
+            document.getElementById('currentRefName').value = "";
+            document.getElementById('screen-match-bilan').classList.add('hidden');
+            document.getElementById('screen-intermatch').classList.remove('hidden');
+        }
+
+        function startMatch() {
+            const refName = document.getElementById('currentRefName').value || "Non renseigné";
+            matchState.referee.name = refName;
+            const idx = tournament.currentMatchIdx;
+            const idxA = tournament.schedule[idx][0];
+            const idxB = tournament.schedule[idx][1];
+            matchState.teamIndices = { A: idxA, B: idxB };
+            const colorA = COLORS[tournament.teams[idxA].colorIdx];
+            const colorB = COLORS[tournament.teams[idxB].colorIdx];
+
+            matchState.teams.A = { name: colorA.label, color: colorA.hex, poss:0, zone:0, touch:0, goal:0, score:0, challenges:3 };
+            matchState.teams.B = { name: colorB.label, color: colorB.hex, poss:0, zone:0, touch:0, goal:0, score:0, challenges:3 };
+            matchState.historyStack = [];
+
+            document.getElementById('labelA').innerText = matchState.teams.A.name;
+            document.getElementById('labelA').style.color = matchState.teams.A.color;
+            document.getElementById('panelA').style.borderLeftColor = matchState.teams.A.color;
+            document.getElementById('labelB').innerText = matchState.teams.B.name;
+            document.getElementById('labelB').style.color = matchState.teams.B.color;
+            document.getElementById('panelB').style.borderRightColor = matchState.teams.B.color;
+
+            // Reset Timer & Button
+            const btnPause = document.getElementById('btn-pause');
+            btnPause.innerHTML = "⏸️";
+            btnPause.className = "w-8 h-8 rounded bg-gray-700 border border-gray-500 flex items-center justify-center hover:bg-gray-600";
+
+            updateUI();
+            document.getElementById('screen-intermatch').classList.add('hidden');
+            document.getElementById('screen-match').classList.remove('hidden');
+
+            matchState.isPlaying = true;
+            if (tournament.config.mode === 'time') {
+                matchState.secondsLeft = tournament.config.duration * 60;
+                matchState.timer = setInterval(timerTick, 1000);
+            } else {
+                document.getElementById('timerDisplay').innerText = "POSS: " + tournament.config.maxPoss;
+            }
+        }
+
+        function togglePause() {
+            if(!matchState.isPlaying && matchState.secondsLeft <= 0) return; 
+
+            const btnPause = document.getElementById('btn-pause');
+            
+            if (matchState.isPlaying) {
+                // Pause
+                matchState.isPlaying = false;
+                if(tournament.config.mode === 'time') clearInterval(matchState.timer);
+                btnPause.innerHTML = "▶️";
+                btnPause.className = "w-8 h-8 rounded bg-green-600 border border-green-400 flex items-center justify-center hover:bg-green-500 animate-pulse";
+            } else {
+                // Play
+                matchState.isPlaying = true;
+                if(tournament.config.mode === 'time') matchState.timer = setInterval(timerTick, 1000);
+                btnPause.innerHTML = "⏸️";
+                btnPause.className = "w-8 h-8 rounded bg-gray-700 border border-gray-500 flex items-center justify-center hover:bg-gray-600";
+            }
+        }
+
+        // --- LIVE STATS LOGIC ---
+        function showLiveStats() {
+            // Auto Pause
+            if (matchState.isPlaying) togglePause();
+            
+            // Calculer Stats sans sauver
+            updateBilanUI(false); // false = isNotFinal
+
+            document.getElementById('screen-match').classList.add('hidden');
+            document.getElementById('screen-match-bilan').classList.remove('hidden');
+        }
+
+        function returnToMatch() {
+            document.getElementById('screen-match-bilan').classList.add('hidden');
+            document.getElementById('screen-match').classList.remove('hidden');
+        }
+
+        function timerTick() {
+            if (matchState.secondsLeft > 0) {
+                matchState.secondsLeft--;
+                const m = Math.floor(matchState.secondsLeft / 60).toString().padStart(2, '0');
+                const s = (matchState.secondsLeft % 60).toString().padStart(2, '0');
+                document.getElementById('timerDisplay').innerText = `${m}:${s}`;
+            } else {
+                clearInterval(matchState.timer);
+                endMatchSequence();
+            }
+        }
+
+        function saveState() {
+            const snapshot = JSON.parse(JSON.stringify(matchState.teams));
+            matchState.historyStack.push(snapshot);
+        }
+        function undoLastAction() {
+            if (matchState.historyStack.length === 0 || !matchState.isPlaying) return;
+            matchState.teams = matchState.historyStack.pop();
+            updateUI();
+        }
+
+        function addStat(teamKey, type) {
+            if (!matchState.isPlaying) return;
+            saveState();
+            const t = matchState.teams[teamKey];
+            if (type === 'poss') {
+                t.poss++;
+                if (tournament.config.mode === 'poss') {
+                    const max = tournament.config.maxPoss;
+                    const current = Math.max(matchState.teams.A.poss, matchState.teams.B.poss);
+                    document.getElementById('timerDisplay').innerText = `POSS: ${max - current}`;
+                    if (t.poss >= max && matchState.teams[teamKey==='A'?'B':'A'].poss >= max) endMatchSequence();
+                }
+            }
+            else if (type === 'zone') { t.zone++; t.score += 1; }
+            else if (type === 'touch') { t.touch++; t.score += 10; }
+            else if (type === 'goal') { t.goal++; t.score += 100; }
+            updateUI();
+        }
+
+        function applyContestation(teamKey) {
+            if (!matchState.isPlaying) return;
+            saveState();
+            const t = matchState.teams[teamKey];
+            t.score = Math.max(0, t.score - 100);
+            updateUI();
+        }
+
+        let pendingTeam = null;
+        function triggerChallenge(teamKey) {
+            if (matchState.teams[teamKey].challenges <= 0) return alert('Plus de challenges');
+            if(matchState.isPlaying) togglePause();
+
+            pendingTeam = teamKey;
+            document.getElementById('challenge-team-name').innerText = matchState.teams[teamKey].name;
+            document.getElementById('step-reason').classList.remove('hidden');
+            document.getElementById('step-verdict').classList.add('hidden');
+            document.getElementById('modal-challenge').classList.remove('hidden');
+        }
+        function selectReason(r) {
+            document.getElementById('selected-reason').innerText = r;
+            document.getElementById('step-reason').classList.add('hidden');
+            document.getElementById('step-verdict').classList.remove('hidden');
+        }
+        function resolveChallenge(valid) {
+            saveState();
+            const t = matchState.teams[pendingTeam];
+            if (!valid) {
+                t.challenges--;
+                t.score = Math.max(0, t.score - 10);
+            }
+            updateUI();
+            closeModal();
+        }
+        function closeModal() { document.getElementById('modal-challenge').classList.add('hidden'); pendingTeam = null; }
+
+        function updateUI() {
+            document.getElementById('scoreDisplayA').innerText = matchState.teams.A.score.toString().padStart(3, '0');
+            document.getElementById('possCountA').innerText = 'P:' + matchState.teams.A.poss;
+            document.getElementById('chal-count-A').innerText = matchState.teams.A.challenges;
+            document.getElementById('scoreDisplayB').innerText = matchState.teams.B.score.toString().padStart(3, '0');
+            document.getElementById('possCountB').innerText = 'P:' + matchState.teams.B.poss;
+            document.getElementById('chal-count-B').innerText = matchState.teams.B.challenges;
+        }
+
+        function endMatchSequence() {
+            matchState.isPlaying = false;
+            clearInterval(matchState.timer);
+            document.getElementById('screen-match').classList.add('hidden');
+            document.getElementById('ref-name-display').innerText = "Arbitres : " + matchState.referee.name;
+            document.getElementById('screen-referee').classList.remove('hidden');
+        }
+
+        function saveReferee(level) {
+            const levels = {1:"Timide", 2:"Présent", 3:"Correct", 4:"Efficace"};
+            matchState.referee.level = level;
+            matchState.referee.text = levels[level];
+            
+            // Finalize Match Stats
+            finalizeMatch();
+            
+            document.getElementById('screen-referee').classList.add('hidden');
+            document.getElementById('screen-match-bilan').classList.remove('hidden');
+        }
+
+        function updateBilanUI(isFinal) {
+            const A = matchState.teams.A;
+            const B = matchState.teams.B;
+            const winner = A.score > B.score ? 'A' : (B.score > A.score ? 'B' : 'Draw');
+
+            // Calculation logic reused
+            const calc = (t) => {
+                const totalShots = t.touch + t.goal;
+                const shotPct = t.poss > 0 ? Math.round(totalShots/t.poss*100) : 0;
+                const goalRatio = t.poss > 0 ? Math.round(t.goal/t.poss*100) : 0;
+                const advice = goalRatio > 30 ? "Bravo, efficacité redoutable !" : "Travaillez la finition du tir.";
+                return { totalShots, shotPct, goalRatio, advice };
+            };
+            const sA = calc(A);
+            const sB = calc(B);
+
+            const showStats = (statsObj, dataObj) => `
+                Possessions: <span class="text-white font-bold">${dataObj.poss}</span><br>
+                Activité (Tirs/Poss): <span class="text-orange-400 font-bold">${statsObj.shotPct}%</span><br>
+                Efficacité (Paniers/Poss): <span class="text-green-400 font-bold">${statsObj.goalRatio}%</span>
+            `;
+
+            document.getElementById('bilan-title').innerText = isFinal ? "Résultat Final" : "Stats en Direct (Temps Mort)";
+            
+            // UI Update
+            document.getElementById('bmNameA').innerText = A.name;
+            document.getElementById('bmScoreA').innerText = A.score;
+            document.getElementById('bmTeamA').innerText = A.name;
+            document.getElementById('bmVerdictA').innerText = winner === 'A' ? (isFinal?'VICTOIRE':'MÈNE') : (isFinal?'DÉFAITE':'PERD');
+            document.getElementById('bmVerdictA').className = `text-xs px-2 rounded ${winner==='A'?'bg-green-600':'bg-red-600'}`;
+            document.getElementById('bmStatsA').innerHTML = showStats(sA, A);
+            document.getElementById('bmAdviceA').innerText = sA.advice;
+
+            document.getElementById('bmNameB').innerText = B.name;
+            document.getElementById('bmScoreB').innerText = B.score;
+            document.getElementById('bmTeamB').innerText = B.name;
+            document.getElementById('bmVerdictB').innerText = winner === 'B' ? (isFinal?'VICTOIRE':'MÈNE') : (isFinal?'DÉFAITE':'PERD');
+            document.getElementById('bmVerdictB').className = `text-xs px-2 rounded ${winner==='B'?'bg-green-600':'bg-red-600'}`;
+            document.getElementById('bmStatsB').innerHTML = showStats(sB, B);
+            document.getElementById('bmAdviceB').innerText = sB.advice;
+
+            // Button Logic
+            const btn = document.getElementById('btn-bilan-action');
+            if (isFinal) {
+                btn.className = "mt-4 w-full py-3 bg-neon-blue text-black font-bold rounded";
+                btn.innerText = tournament.currentMatchIdx === 2 ? "Voir le Classement Final 🏆" : "Match Suivant >";
+                btn.onclick = nextStep;
+            } else {
+                btn.className = "mt-4 w-full py-3 bg-yellow-600 text-white font-bold rounded animate-pulse";
+                btn.innerText = "Retour au Match ↩️";
+                btn.onclick = returnToMatch;
+            }
+        }
+
+        function finalizeMatch() {
+            const A = matchState.teams.A;
+            const B = matchState.teams.B;
+            const winner = A.score > B.score ? 'A' : (B.score > A.score ? 'B' : 'Draw');
+
+            // Update Global Tournament Data
+            const updateTourney = (teamIdx, t, won) => {
+                const ts = tournament.teams[teamIdx].stats;
+                if(won) ts.wins++;
+                ts.score += t.score;
+                ts.poss += t.poss;
+                ts.shots += (t.touch + t.goal);
+                ts.goals += t.goal;
+            };
+
+            updateTourney(matchState.teamIndices.A, A, winner === 'A');
+            updateTourney(matchState.teamIndices.B, B, winner === 'B');
+
+            // Save History
+            // Recalc stats specifically for history saving
+            const calc = (t) => {
+                const totalShots = t.touch + t.goal;
+                const shotPct = t.poss > 0 ? Math.round(totalShots/t.poss*100) : 0;
+                const goalRatio = t.poss > 0 ? Math.round(t.goal/t.poss*100) : 0;
+                return { totalShots, shotPct, goalRatio };
+            };
+
+            tournament.history.push({
+                matchIdx: tournament.currentMatchIdx + 1,
+                teamA: { ...A, ...calc(A) },
+                teamB: { ...B, ...calc(B) },
+                referee: matchState.referee
+            });
+
+            // Show Final UI
+            updateBilanUI(true);
+        }
+
+        function nextStep() {
+            tournament.currentMatchIdx++;
+            setupInterMatch();
+        }
+
+        function showSuperBilan() {
+            document.getElementById('screen-match-bilan').classList.add('hidden');
+            document.getElementById('screen-super-bilan').classList.remove('hidden');
+
+            const rankedTeams = [...tournament.teams].sort((a, b) => {
+                if (b.stats.wins !== a.stats.wins) return b.stats.wins - a.stats.wins;
+                return b.stats.score - a.stats.score;
+            });
+
+            const tbody = document.getElementById('ranking-body');
+            tbody.innerHTML = '';
+            rankedTeams.forEach((t, i) => {
+                const col = COLORS[t.colorIdx];
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-700";
+                tr.innerHTML = `
+                    <td class="px-2 py-3 font-bold text-white">${i+1}</td>
+                    <td class="px-2 py-3 font-bold" style="color:${col.hex}">${col.label}</td>
+                    <td class="px-2 py-3 text-center text-white">${t.stats.wins * 3}</td>
+                    <td class="px-2 py-3 text-center text-neon-blue">${t.stats.score}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const summaryDiv = document.getElementById('tournament-stats-summary');
+            summaryDiv.innerHTML = '';
+            rankedTeams.forEach(t => {
+                const col = COLORS[t.colorIdx];
+                const goalRatio = t.stats.poss > 0 ? Math.round(t.stats.goals / t.stats.poss * 100) : 0;
+                
+                summaryDiv.innerHTML += `
+                    <div class="bg-gray-800 p-3 rounded border-l-4" style="border-color:${col.hex}">
+                        <h3 class="font-bold text-lg" style="color:${col.hex}">${col.label}</h3>
+                        <div class="grid grid-cols-2 gap-2 text-center text-xs mt-2 text-gray-300">
+                            <div class="bg-black/30 p-2 rounded">Victoires: <span class="text-white font-bold">${t.stats.wins}</span></div>
+                            <div class="bg-black/30 p-2 rounded">Score: <span class="text-neon-blue font-bold">${t.stats.score}</span></div>
+                            <div class="bg-black/30 p-2 rounded col-span-2">
+                                Efficacité Tournoi (Paniers/Poss): <span class="text-green-400 font-bold text-sm">${goalRatio}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function generateTournamentPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(22);
+            doc.text("TOURNOI BASKET - EPS", 105, 20, null, null, "center");
+            
+            doc.setFontSize(16); doc.setTextColor(0, 0, 0);
+            doc.text("Classement Final", 14, 40);
+            
+            const tableData = [...tournament.teams]
+                .sort((a,b) => b.stats.wins - a.stats.wins || b.stats.score - a.stats.score)
+                .map((t, i) => [
+                    i+1, 
+                    COLORS[t.colorIdx].label, 
+                    t.stats.wins, 
+                    t.stats.score,
+                    (t.stats.poss > 0 ? Math.round(t.stats.goals/t.stats.poss*100) : 0) + '%'
+                ]);
+
+            doc.autoTable({
+                startY: 45,
+                head: [['Rang', 'Équipe', 'Victoires', 'Points', '% Efficacité (Paniers/Poss)']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [41, 128, 185] }
+            });
+
+            let y = doc.lastAutoTable.finalY + 15;
+            doc.text("Détail des Matchs", 14, y);
+            y += 10;
+
+            tournament.history.forEach(match => {
+                if(y > 250) { doc.addPage(); y = 20; }
+                
+                doc.setFontSize(12);
+                doc.setFillColor(230, 230, 230);
+                doc.rect(14, y-6, 180, 8, 'F');
+                doc.text(`Match ${match.matchIdx} : ${match.teamA.name} (${match.teamA.score}) vs ${match.teamB.name} (${match.teamB.score})`, 16, y);
+                y += 7;
+                
+                doc.setFontSize(10);
+                doc.text(`Stats A: Eff. ${match.teamA.goalRatio}% (Paniers/Poss) | Stats B: Eff. ${match.teamB.goalRatio}% (Paniers/Poss)`, 16, y);
+                y += 5;
+                doc.text(`Arbitres: ${match.referee.name} (${match.referee.text})`, 16, y);
+                y += 10;
+            });
+            doc.save("bilan-tournoi-basket.pdf");
+        }
+
+        window.onload = initSelectors;
+    </script>
+</body>
+</html>

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NumEPS - Basket 3ème</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        .lcd { font-family: 'Orbitron', sans-serif; }
+        .btn-active { transform: scale(0.95); opacity: 0.8; }
+        body { touch-action: manipulation; }
+        .bg-bleu { background-color: #3b82f6; }
+        .bg-jaune { background-color: #facc15; }
+        .bg-rouge { background-color: #ef4444; }
+        .bg-vert { background-color: #22c55e; }
+        .bg-noir { background-color: #1f2937; color: white; }
+        .bg-blanc { background-color: #ffffff; border: 2px solid #e5e7eb; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col p-4">
+        <div class="flex justify-between items-center mb-4 bg-white p-2 rounded-xl shadow-sm">
+            <div class="font-bold text-blue-600">NumEPS</div>
+            <div class="flex gap-2">
+                <button onclick="app.undo()" class="bg-gray-200 p-2 rounded shadow text-xs">↩ Annuler</button>
+                <button onclick="app.showPage('super-bilan')" class="bg-orange-500 text-white p-2 rounded shadow text-xs">📊 Bilan Final</button>
+            </div>
+        </div>
+
+        <section id="page-config" class="page space-y-4">
+            <h2 class="text-xl font-bold text-center">🏆 Tournoi 3 Équipes</h2>
+            <div class="bg-white p-4 rounded-2xl shadow-md space-y-4">
+                <p class="font-semibold">Choisissez 3 couleurs :</p>
+                <div id="color-selector" class="grid grid-cols-3 gap-2">
+                    <button onclick="app.toggleColor('Bleu', 'bg-bleu')" class="p-3 rounded border bg-bleu text-white">Bleu</button>
+                    <button onclick="app.toggleColor('Jaune', 'bg-jaune')" class="p-3 rounded border bg-jaune">Jaune</button>
+                    <button onclick="app.toggleColor('Rouge', 'bg-rouge')" class="p-3 rounded border bg-rouge text-white">Rouge</button>
+                    <button onclick="app.toggleColor('Vert', 'bg-vert')" class="p-3 rounded border bg-vert text-white">Vert</button>
+                    <button onclick="app.toggleColor('Noir', 'bg-noir')" class="p-3 rounded border bg-noir text-white">Noir</button>
+                    <button onclick="app.toggleColor('Blanc', 'bg-blanc')" class="p-3 rounded border bg-blanc">Blanc</button>
+                </div>
+                
+                <hr>
+                
+                <p class="font-semibold">Mode de fin de match :</p>
+                <select id="match-mode" onchange="app.updateModeUI()" class="w-full p-2 border rounded">
+                    <option value="temps">⏱ Au Temps (minutes)</option>
+                    <option value="possessions">🏀 Au Nombre de Possessions</option>
+                </select>
+                <input type="number" id="mode-value" value="5" class="w-full p-2 border rounded text-center text-xl font-bold">
+                
+                <button onclick="app.initTournoi()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg">LANCER LE TOURNOI</button>
+            </div>
+        </section>
+
+        <section id="page-avant-match" class="page hidden space-y-4">
+            <div class="bg-white p-4 rounded-2xl shadow-md">
+                <h3 class="text-lg font-bold mb-4">Préparation Match <span id="match-num">1</span></h3>
+                <div class="flex justify-around items-center mb-6">
+                    <div id="team-a-display" class="p-4 rounded-xl font-bold text-center w-24">A</div>
+                    <div class="font-bold">VS</div>
+                    <div id="team-b-display" class="p-4 rounded-xl font-bold text-center w-24">B</div>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium">Nom des arbitres :</label>
+                    <input type="text" id="arbitre-names" placeholder="Prénoms..." class="w-full p-3 border rounded-lg">
+                </div>
+                <button onclick="app.startMatch()" class="w-full bg-green-600 text-white py-4 mt-6 rounded-xl font-bold">DÉBUT DU MATCH</button>
+                <button onclick="app.showPage('page-config')" class="w-full text-gray-500 text-sm mt-2">Retour</button>
+            </div>
+        </section>
+
+        <section id="page-match" class="page hidden space-y-4">
+            <div class="bg-black text-green-400 p-4 rounded-xl shadow-inner flex justify-between items-center lcd">
+                <div class="text-center">
+                    <div id="team-a-score" class="text-4xl">0</div>
+                    <div class="text-[10px]" id="team-a-name-match">EQUIPE A</div>
+                </div>
+                <div class="text-center">
+                    <div id="timer-display" class="text-3xl">00:00</div>
+                    <button id="btn-timer" onclick="app.toggleTimer()" class="bg-green-900 text-green-400 px-3 py-1 rounded text-xs mt-1 border border-green-400">START/STOP</button>
+                </div>
+                <div class="text-center">
+                    <div id="team-b-score" class="text-4xl">0</div>
+                    <div class="text-[10px]" id="team-b-name-match">EQUIPE B</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 h-full">
+                <div id="zone-a" class="flex flex-col gap-2">
+                    <button onclick="app.addAction('A', 'possession')" class="h-24 rounded-2xl border-4 flex flex-col items-center justify-center font-bold text-sm shadow-md" id="btn-pos-a">
+                        POSSESSION
+                        <span id="pos-rem-a" class="text-xs font-normal"></span>
+                    </button>
+                    <div id="actions-a" class="hidden grid grid-cols-1 gap-2">
+                        <button onclick="app.addAction('A', 'zone', 1)" class="bg-white border-2 border-slate-300 p-3 rounded-lg text-xs font-bold">Zone Favorable (+1)</button>
+                        <button onclick="app.addAction('A', 'anneau', 10)" class="bg-white border-2 border-slate-300 p-3 rounded-lg text-xs font-bold">Anneau (+10)</button>
+                        <button onclick="app.addAction('A', 'panier', 100)" class="bg-white border-2 border-slate-300 p-3 rounded-lg text-xs font-bold">PANIER (+100)</button>
+                    </div>
+                    <div class="flex flex-col gap-1 mt-2">
+                        <button onclick="app.openChallenge('A')" class="bg-purple-600 text-white p-2 rounded text-[10px]">CHALLENGE (<span id="cha-a">3</span>)</button>
+                        <button onclick="app.addContestation('A')" class="bg-red-600 text-white p-2 rounded text-[10px]">CONTESTATION (-100)</button>
+                    </div>
+                </div>
+
+                <div id="zone-b" class="flex flex-col gap-2">
+                    <button onclick="app.addAction('B', 'possession')" class="h-24 rounded-2xl border-4 flex flex-col items-center justify-center font-bold text-sm shadow-md" id="btn-pos-b">
+                        POSSESSION
+                        <span id="pos-rem-b" class="text-xs font-normal"></span>
+                    </button>
+                    <div id="actions-b" class="hidden grid grid-cols-1 gap-2">
+                        <button onclick="app.addAction('B', 'zone', 1)" class="bg-white border-2 border-slate-300 p-3 rounded-lg text-xs font-bold">Zone Favorable (+1)</button>
+                        <button onclick="app.addAction('B', 'anneau', 10)" class="bg-white border-2 border-slate-300 p-3 rounded-lg text-xs font-bold">Anneau (+10)</button>
+                        <button onclick="app.addAction('B', 'panier', 100)" class="bg-white border-2 border-slate-300 p-3 rounded-lg text-xs font-bold">PANIER (+100)</button>
+                    </div>
+                    <div class="flex flex-col gap-1 mt-2">
+                        <button onclick="app.openChallenge('B')" class="bg-purple-600 text-white p-2 rounded text-[10px]">CHALLENGE (<span id="cha-b">3</span>)</button>
+                        <button onclick="app.addContestation('B')" class="bg-red-600 text-white p-2 rounded text-[10px]">CONTESTATION (-100)</button>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="app.finishMatch()" class="w-full bg-slate-800 text-white py-4 rounded-xl font-bold shadow-xl">FIN DU MATCH</button>
+        </section>
+
+        <div id="modal-challenge" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50">
+            <div class="bg-white w-full rounded-2xl p-6 space-y-4">
+                <h3 class="text-xl font-bold">Challenge Équipe <span id="cha-team-name">?</span></h3>
+                <p>Motif de la demande :</p>
+                <select id="cha-reason" class="w-full p-3 border rounded-xl">
+                    <option>Marché</option>
+                    <option>Contact / Faute</option>
+                    <option>Reprise de dribble</option>
+                </select>
+                <div class="grid grid-cols-2 gap-4">
+                    <button onclick="app.resolveChallenge(true)" class="bg-green-500 text-white p-4 rounded-xl font-bold">VALIDÉ ✅</button>
+                    <button onclick="app.resolveChallenge(false)" class="bg-red-500 text-white p-4 rounded-xl font-bold">REFUSÉ ❌ (-10)</button>
+                </div>
+            </div>
+        </div>
+
+        <section id="page-eval-arbitre" class="page hidden space-y-4">
+            <div class="bg-white p-4 rounded-2xl shadow-md space-y-4">
+                <h3 class="text-xl font-bold text-center">Évaluation de l'arbitrage</h3>
+                <div class="space-y-4">
+                    <button onclick="app.setArbitreNiveau(1)" class="w-full p-4 border rounded-xl text-left">
+                        <span class="font-bold">Niveau 1</span> : Arbitre timide, il ne siffle pas ou peu.
+                    </button>
+                    <button onclick="app.setArbitreNiveau(2)" class="w-full p-4 border rounded-xl text-left">
+                        <span class="font-bold">Niveau 2</span> : Arbitre présent, il siffle peu et fait quelques erreurs.
+                    </button>
+                    <button onclick="app.setArbitreNiveau(3)" class="w-full p-4 border rounded-xl text-left">
+                        <span class="font-bold">Niveau 3</span> : Arbitre correct. Il siffle les fautes évidentes.
+                    </button>
+                    <button onclick="app.setArbitreNiveau(4)" class="w-full p-4 border rounded-xl text-left">
+                        <span class="font-bold">Niveau 4</span> : Arbitre efficace. Siffle tout et explique.
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-resultat-match" class="page hidden space-y-4">
+            <div id="pdf-match-result" class="bg-white p-6 rounded-2xl shadow-md space-y-4">
+                <h2 class="text-2xl font-bold text-center text-blue-600">Bilan du Match</h2>
+                <div id="match-summary-content" class="space-y-4">
+                    </div>
+            </div>
+            <button onclick="app.nextMatch()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg">MATCH SUIVANT</button>
+            <button onclick="app.downloadResult()" class="w-full border-2 border-blue-600 text-blue-600 py-2 rounded-xl font-bold">Télécharger PDF</button>
+        </section>
+
+        <section id="page-super-bilan" class="page hidden space-y-4">
+            <div id="pdf-super-bilan" class="bg-white p-6 rounded-2xl shadow-md">
+                <h2 class="text-2xl font-bold text-center mb-4">🏆 Super Bilan Tournoi</h2>
+                <div id="super-bilan-content" class="space-y-6"></div>
+            </div>
+            <button onclick="app.downloadSuperBilan()" class="w-full bg-orange-600 text-white py-4 rounded-xl font-bold">Exporter Bilan Final (PDF)</button>
+            <button onclick="location.reload()" class="w-full text-red-500 font-bold">Recommencer le tournoi</button>
+        </section>
+    </div>
+
+    <script>
+        const app = {
+            selectedColors: [],
+            teams: [],
+            matches: [],
+            currentMatchIdx: 0,
+            history: [],
+            matchMode: 'temps',
+            matchVal: 5,
+            
+            state: {
+                timer: null,
+                timeLeft: 0,
+                activeMatch: null,
+                isTimerRunning: false
+            },
+
+            toggleColor(name, colorClass) {
+                if(this.selectedColors.some(c => c.name === name)) {
+                    this.selectedColors = this.selectedColors.filter(c => c.name !== name);
+                } else if(this.selectedColors.length < 3) {
+                    this.selectedColors.push({name, class: colorClass});
+                }
+                this.updateColorUI();
+            },
+
+            updateColorUI() {
+                document.querySelectorAll('#color-selector button').forEach(btn => {
+                    const name = btn.innerText;
+                    if(this.selectedColors.some(c => c.name === name)) {
+                        btn.classList.add('ring-4', 'ring-blue-400');
+                    } else {
+                        btn.classList.remove('ring-4', 'ring-blue-400');
+                    }
+                });
+            },
+
+            updateModeUI() {
+                this.matchMode = document.getElementById('match-mode').value;
+                const input = document.getElementById('mode-value');
+                input.value = this.matchMode === 'temps' ? 5 : 10;
+            },
+
+            initTournoi() {
+                if(this.selectedColors.length < 3) return alert("Choisissez 3 équipes !");
+                this.matchVal = parseInt(document.getElementById('mode-value').value);
+                
+                this.teams = this.selectedColors.map(c => ({
+                    name: c.name,
+                    class: c.class,
+                    pointsTournoi: 0,
+                    scoreTotal: 0,
+                    totalPossessions: 0,
+                    totalPaniers: 0,
+                    totalTirs: 0,
+                    statsMatchs: []
+                }));
+
+                // Tournoi : 1vs2, 2vs3, 3vs1
+                this.matches = [
+                    {a: 0, b: 1, arbitres: '', stats: null},
+                    {a: 1, b: 2, arbitres: '', stats: null},
+                    {a: 2, b: 0, arbitres: '', stats: null}
+                ];
+                
+                this.showAvantMatch();
+            },
+
+            showAvantMatch() {
+                if(this.currentMatchIdx >= 3) {
+                    this.showPage('page-super-bilan');
+                    this.renderSuperBilan();
+                    return;
+                }
+                const match = this.matches[this.currentMatchIdx];
+                document.getElementById('match-num').innerText = this.currentMatchIdx + 1;
+                const ta = this.teams[match.a];
+                const tb = this.teams[match.b];
+                
+                const da = document.getElementById('team-a-display');
+                const db = document.getElementById('team-b-display');
+                da.innerText = ta.name; da.className = `p-4 rounded-xl font-bold text-center w-24 ${ta.class}`;
+                db.innerText = tb.name; db.className = `p-4 rounded-xl font-bold text-center w-24 ${tb.class}`;
+                
+                this.showPage('page-avant-match');
+            },
+
+            startMatch() {
+                const match = this.matches[this.currentMatchIdx];
+                match.arbitres = document.getElementById('arbitre-names').value;
+                
+                this.state.activeMatch = {
+                    teamA: { id: match.a, score: 0, pos: 0, zone: 0, anneau: 0, panier: 0, challenges: 3 },
+                    teamB: { id: match.b, score: 0, pos: 0, zone: 0, anneau: 0, panier: 0, challenges: 3 }
+                };
+
+                document.getElementById('team-a-name-match').innerText = this.teams[match.a].name;
+                document.getElementById('team-b-name-match').innerText = this.teams[match.b].name;
+                document.getElementById('btn-pos-a').className = `h-24 rounded-2xl border-4 flex flex-col items-center justify-center font-bold text-sm shadow-md ${this.teams[match.a].class}`;
+                document.getElementById('btn-pos-b').className = `h-24 rounded-2xl border-4 flex flex-col items-center justify-center font-bold text-sm shadow-md ${this.teams[match.b].class}`;
+
+                if(this.matchMode === 'temps') {
+                    this.state.timeLeft = this.matchVal * 60;
+                    this.updateTimerDisplay();
+                } else {
+                    document.getElementById('timer-display').innerText = "MODE POSS.";
+                    this.updatePossessionUI();
+                }
+
+                this.history = [];
+                this.updateScoreUI();
+                this.showPage('page-match');
+            },
+
+            updateScoreUI() {
+                document.getElementById('team-a-score').innerText = this.state.activeMatch.teamA.score;
+                document.getElementById('team-b-score').innerText = this.state.activeMatch.teamB.score;
+                document.getElementById('cha-a').innerText = this.state.activeMatch.teamA.challenges;
+                document.getElementById('cha-b').innerText = this.state.activeMatch.teamB.challenges;
+            },
+
+            updatePossessionUI() {
+                if(this.matchMode === 'possessions') {
+                    document.getElementById('pos-rem-a').innerText = `Restant: ${this.matchVal - this.state.activeMatch.teamA.pos}`;
+                    document.getElementById('pos-rem-b').innerText = `Restant: ${this.matchVal - this.state.activeMatch.teamB.pos}`;
+                } else {
+                    document.getElementById('pos-rem-a').innerText = `Total: ${this.state.activeMatch.teamA.pos}`;
+                    document.getElementById('pos-rem-b').innerText = `Total: ${this.state.activeMatch.teamB.pos}`;
+                }
+            },
+
+            toggleTimer() {
+                if(this.state.isTimerRunning) {
+                    clearInterval(this.state.timer);
+                    document.getElementById('btn-timer').innerText = "START";
+                } else {
+                    this.state.timer = setInterval(() => {
+                        this.state.timeLeft--;
+                        this.updateTimerDisplay();
+                        if(this.state.timeLeft <= 0) this.finishMatch();
+                    }, 1000);
+                    document.getElementById('btn-timer').innerText = "STOP";
+                }
+                this.state.isTimerRunning = !this.state.isTimerRunning;
+            },
+
+            updateTimerDisplay() {
+                const m = Math.floor(this.state.timeLeft / 60);
+                const s = this.state.timeLeft % 60;
+                document.getElementById('timer-display').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            },
+
+            addAction(side, type, val = 0) {
+                this.history.push(JSON.parse(JSON.stringify(this.state.activeMatch)));
+                const team = side === 'A' ? this.state.activeMatch.teamA : this.state.activeMatch.teamB;
+                
+                if(type === 'possession') {
+                    team.pos++;
+                    document.getElementById(`actions-${side.toLowerCase()}`).classList.remove('hidden');
+                } else {
+                    team[type]++;
+                    team.score += val;
+                    document.getElementById(`actions-${side.toLowerCase()}`).classList.add('hidden');
+                }
+                
+                this.updateScoreUI();
+                this.updatePossessionUI();
+                if(this.matchMode === 'possessions' && this.state.activeMatch.teamA.pos >= this.matchVal && this.state.activeMatch.teamB.pos >= this.matchVal) {
+                    this.finishMatch();
+                }
+            },
+
+            addContestation(side) {
+                this.history.push(JSON.parse(JSON.stringify(this.state.activeMatch)));
+                const team = side === 'A' ? this.state.activeMatch.teamA : this.state.activeMatch.teamB;
+                team.score -= 100;
+                this.updateScoreUI();
+                alert("CONTESTATION ! -100 points pour l'équipe.");
+            },
+
+            undo() {
+                if(this.history.length > 0) {
+                    this.state.activeMatch = this.history.pop();
+                    this.updateScoreUI();
+                    this.updatePossessionUI();
+                }
+            },
+
+            openChallenge(side) {
+                if(this.state.isTimerRunning) this.toggleTimer();
+                this.state.challengeSide = side;
+                const team = side === 'A' ? this.state.activeMatch.teamA : this.state.activeMatch.teamB;
+                if(team.challenges <= 0) return alert("Plus de challenges !");
+                
+                document.getElementById('cha-team-name').innerText = this.teams[team.id].name;
+                document.getElementById('modal-challenge').classList.remove('hidden');
+            },
+
+            resolveChallenge(isValid) {
+                const side = this.state.challengeSide;
+                const team = side === 'A' ? this.state.activeMatch.teamA : this.state.activeMatch.teamB;
+                
+                if(!isValid) {
+                    team.challenges--;
+                    team.score -= 10;
+                }
+                document.getElementById('modal-challenge').classList.add('hidden');
+                this.updateScoreUI();
+            },
+
+            finishMatch() {
+                clearInterval(this.state.timer);
+                this.showPage('page-eval-arbitre');
+            },
+
+            setArbitreNiveau(n) {
+                const m = this.state.activeMatch;
+                m.evalArbitre = n;
+                this.matches[this.currentMatchIdx].stats = m;
+                this.calculateMatchResult();
+            },
+
+            calculateMatchResult() {
+                const match = this.matches[this.currentMatchIdx];
+                const s = match.stats;
+                
+                // Update global team stats
+                const updateTeam = (teamIdx, stats, opponentScore) => {
+                    const t = this.teams[teamIdx];
+                    const tirs = stats.zone + stats.anneau + stats.panier;
+                    const resultMatch = {
+                        win: stats.score > opponentScore,
+                        score: stats.score,
+                        pos: stats.pos,
+                        tirs: tirs,
+                        paniers: stats.panier,
+                        zone: stats.zone,
+                        pctTirPos: stats.pos > 0 ? (tirs / stats.pos) * 100 : 0,
+                        pctPanierTir: tirs > 0 ? (stats.panier / tirs) * 100 : 0,
+                        pointsTournoi: stats.score > opponentScore ? 3 : (stats.score === opponentScore ? 1 : 0)
+                    };
+                    t.pointsTournoi += resultMatch.pointsTournoi;
+                    t.totalPossessions += stats.pos;
+                    t.totalTirs += tirs;
+                    t.totalPaniers += stats.panier;
+                    t.statsMatchs.push(resultMatch);
+                    return resultMatch;
+                };
+
+                const resA = updateTeam(match.a, s.teamA, s.teamB.score);
+                const resB = updateTeam(match.b, s.teamB, s.teamA.score);
+
+                this.renderResultPage(resA, resB);
+                this.showPage('page-resultat-match');
+            },
+
+            getAdvice(res) {
+                let advice = "";
+                if(res.win) {
+                    advice = res.pctTirPos > 30 
+                        ? "Bravo ! Vous avez atteint régulièrement la zone favorable. Travaillez le tir en double appui pour l'efficacité."
+                        : "Victoire tactique ! Travaillez le démarquage et la montée de balle rapide (3 contre 1).";
+                } else {
+                    advice = res.pctTirPos > 30
+                        ? "Presque ! Manque d'efficacité au tir. Travaillez le 'Tour du monde' ou le tir sous pression."
+                        : "Vous pouvez vous améliorer. Travaillez le démarquage en situation de 2 contre 1.";
+                }
+                if(res.pctPanierTir < 25) advice += " ⚠️ Le travail du tir est prioritaire.";
+                return advice;
+            },
+
+            renderResultPage(resA, resB) {
+                const teamA = this.teams[this.matches[this.currentMatchIdx].a];
+                const teamB = this.teams[this.matches[this.currentMatchIdx].b];
+                
+                const html = `
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-2 rounded ${teamA.class} text-center font-bold">${teamA.name} : ${resA.score}</div>
+                        <div class="p-2 rounded ${teamB.class} text-center font-bold">${teamB.name} : ${resB.score}</div>
+                    </div>
+                    <div class="text-sm space-y-4">
+                        <div class="border-l-4 border-blue-500 pl-2">
+                            <p class="font-bold">${teamA.name}</p>
+                            <p>Tirs/Possession: ${resA.pctTirPos.toFixed(1)}% | Panier/Tir: ${resA.pctPanierTir.toFixed(1)}%</p>
+                            <p class="italic text-xs text-blue-700">${this.getAdvice(resA)}</p>
+                        </div>
+                        <div class="border-l-4 border-red-500 pl-2">
+                            <p class="font-bold">${teamB.name}</p>
+                            <p>Tirs/Possession: ${resB.pctTirPos.toFixed(1)}% | Panier/Tir: ${resB.pctPanierTir.toFixed(1)}%</p>
+                            <p class="italic text-xs text-blue-700">${this.getAdvice(resB)}</p>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('match-summary-content').innerHTML = html;
+            },
+
+            nextMatch() {
+                this.currentMatchIdx++;
+                this.showAvantMatch();
+            },
+
+            renderSuperBilan() {
+                const sorted = [...this.teams].sort((a,b) => b.pointsTournoi - a.pointsTournoi || b.scoreTotal - a.scoreTotal);
+                let html = `<table class="w-full text-sm">
+                    <thead><tr class="bg-gray-100"><th>Equipe</th><th>Pts</th><th>Poss.</th><th>% Panier</th></tr></thead>
+                    <tbody>`;
+                sorted.forEach(t => {
+                    const pct = t.totalTirs > 0 ? (t.totalPaniers / t.totalTirs * 100).toFixed(1) : 0;
+                    html += `<tr class="border-b text-center">
+                        <td class="py-2 ${t.class}">${t.name}</td>
+                        <td class="font-bold">${t.pointsTournoi}</td>
+                        <td>${t.totalPossessions}</td>
+                        <td>${pct}%</td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+                document.getElementById('super-bilan-content').innerHTML = html;
+            },
+
+            showPage(id) {
+                document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+                document.getElementById(id).classList.remove('hidden');
+            },
+
+            downloadResult() {
+                const el = document.getElementById('pdf-match-result');
+                html2pdf().from(el).save(`Match_${this.currentMatchIdx + 1}.pdf`);
+            },
+
+            downloadSuperBilan() {
+                const el = document.getElementById('pdf-super-bilan');
+                html2pdf().from(el).save(`Tournoi_Bilan_Final.pdf`);
+            }
+        };
+
+        // Init UI
+        app.updateModeUI();
+    </script>
+</body>
+</html>
